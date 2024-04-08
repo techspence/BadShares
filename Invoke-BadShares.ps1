@@ -25,11 +25,11 @@
             Write-Host "`n[i] Beginning the BadShares setup process..."
            
         } else {
-            Write-Host "`n[!] Guess you're starting over?.." -ForegroundColor Yellow
+            Write-Warning "You need to select y to use BadShares."
             break;
         }
         if (Test-Path -Path $BadSharesPath) {
-            Write-Warning "[!] The directory '$BadSharesPath' already exists!"
+            Write-Warning "The directory '$BadSharesPath' already exists!"
             Write-Host "[i] If you continue, this script will overwrite: " -ForegroundColor Yellow -NoNewline
             Write-Host "$BadSharesPath" -ForegroundColor Cyan
             Write-Host "[i] Do you want to continue [Y] Yes "  -ForegroundColor Yellow -NoNewline
@@ -38,18 +38,18 @@
             $WarningError = ''
             $WarningError = Read-Host
             if ($WarningError -like 'y') {
-                Write-Host "`n[i] Creating a shares directory at: $BadSharesPath"
+                Write-Host "`n[+] Creating a shares directory at: $BadSharesPath"
                 try {
                     New-Item -Path $BadSharesPath -ItemType Directory -Force
                 } catch {
                     Write-Error "Could not create the directory '$BadSharesPath'. Please check the path and run again."
                 }
             } else {
-                Write-Host "`n[i] You chose to NOT create a share directory.`n[i] Create the shares directory manually or run again to create the shares directory." -ForegroundColor Yellow
+                Write-Warning "You chose to NOT create a share directory.`nCreate the shares directory manually or run again to create the shares directory."
                 break;
             }
         } else {
-            Write-Host "[i] Creating a shares directory at: $BadSharesPath"
+            Write-Host "[+] Creating a shares directory at: $BadSharesPath"
             try {
                 New-Item -Path $BadSharesPath -ItemType Directory
             } catch {
@@ -77,39 +77,37 @@ function New-SMBSharedFolder {
         [string[]]$BadShareNames
     )
 
-    Write-Warning "[i] Now we will create the SMB Shares"
-    Write-Host "[i] If you continue, this script will create SMB shares for each BadShare: " -ForegroundColor Yellow
+    Write-Host "`n[i] Now we will create the SMB Shares"
+    Write-Host "[i] If you continue, this script will create SMB shares for each BadShare" -ForegroundColor Yellow
     Write-Host "[i] Do you want to continue [Y] Yes "  -ForegroundColor Yellow -NoNewline
     Write-Host "[N] " -ForegroundColor Yellow -NoNewline
     Write-Host "No: "  -ForegroundColor Yellow -NoNewline
     $WarningError = ''
     $WarningError = Read-Host
     if ($WarningError -like 'y') {
-        Write-Host "`n[i] Creating new SMB shares"
+        Write-Host "`n[+] Creating new SMB shares"
         try {
-            New-Item -Path $BadSharesPath -ItemType Directory -Force
+            foreach ($Name in $BadShareNames) {
+                $BadSharePath = "$Root\$Name"
+                Write-Verbose "Creating directory: $BadSharePath"
+                try {
+                    New-Item -Path $BadSharePath -ItemType Directory
+                } catch {
+                    Write-Error "Could not create BadShare: BadSharePath"
+                }
+
+                try {
+                    New-SmbShare -Name $Name -Path $BadSharePath
+                } catch {
+                    Write-Error "Could not create the SMB Share for $BadSharePath"
+                }
+            }
         } catch {
             Write-Error "Could not create SMB shares."
         }
     } else {
-        Write-Host "`n[i] You chose to NOT create a the SMB shares.`n[i] Create the shares manually or run again to create the shares." -ForegroundColor Yellow
+        Write-Warning "You chose to NOT create a the SMB shares.`nCreate the shares manually or run again to create the shares."
         break;
-    }
-
-    foreach ($Name in $BadShareNames) {
-        $BadSharePath = "$Root\$Name"
-        Write-Verbose "Creating directory: $BadSharePath"
-        try {
-            New-Item -Path $BadSharePath -ItemType Directory
-        } catch {
-            Write-Error "Could not create BadShare: BadSharePath"
-        }
-
-        try {
-            New-SmbShare -Name $Name -Path $BadSharePath
-        } catch {
-            Write-Error "Could not create the SMB Share for $BadSharePath"
-        }
     }
 
     Write-Host "[i] Finished creating BadShares"
@@ -121,12 +119,20 @@ function Clear-BadShares {
         [ValidateNotNullOrEmpty()]
         [string]$Root = "C:\BadShares"
     )
-    $SharedFolders = Get-ChildItem -Path $Root
-
-    foreach ($Share in $SharedFolders) {
-        Remove-SmbShare -Name $Share.Name
+    
+    if (Test-Path $Root){
+        try {
+            $SharedFolders = Get-ChildItem -Path $Root
+            foreach ($Share in $SharedFolders) {
+                Remove-SmbShare -Name $Share.Name
+            }
+            Remove-Item -Path $Root -Recurse #-Confirm
+        } catch {
+            Write-Error "There was a problem clearing existing BadShares"
+        }
+    } else {
+        # BadShares doesn't exist yet
     }
-    Remove-Item -Path $Root -Recurse #-Confirm
 }
 
 function New-RandomLastWriteTime {
@@ -206,10 +212,27 @@ function Add-DummyFiles {
     $BadSharesRoot = $Root
     $BadSharesFolders = Get-ChildItem -Path $BadSharesRoot
 
-    foreach ($Share in $BadSharesFolders) {
-        1..$NumberOfDummyFiles | ForEach-Object {
-            New-RandomFile -Path $Share.FullName 
+    Write-Host "`n[i] Now we will create dummy files"
+    Write-Host "[i] If you continue, this script will create $NumberOfDummyFiles files in each share" -ForegroundColor Yellow
+    Write-Host "[i] Do you want to continue [Y] Yes "  -ForegroundColor Yellow -NoNewline
+    Write-Host "[N] " -ForegroundColor Yellow -NoNewline
+    Write-Host "No: "  -ForegroundColor Yellow -NoNewline
+    $WarningError = ''
+    $WarningError = Read-Host
+    if ($WarningError -like 'y') {
+        Write-Host "`n[+] Creating dummy files"
+        try {
+            foreach ($Share in $BadSharesFolders) {
+                1..$NumberOfDummyFiles | ForEach-Object {
+                    New-RandomFile -Path $Share.FullName 
+                }
+            } 
+        } catch {
+            Write-Error "Could not create dummy files"
         }
+    } else {
+        Write-Warning "You chose to NOT create the dummy files.`nThe shares will not have dummy files."
+        break;
     }
 }
 
@@ -245,16 +268,33 @@ function Set-MiconfiguredBadShares {
     $Groups = @("Everyone", "$($env:USERDOMAIN)\Domain Users", "NT AUTHORITY\Authenticated Users", "NT AUTHORITY\ANONYMOUS LOGON")
     $UnsafePermissions = @("FullControl","Write","Modify")
 
-    1..10 | ForEach-Object {
-        $RandomSharedFolder = $ShareList | Get-Random 
-        $RandomGroup = $Groups | Get-Random
-        $RandomUnsafePermission = $UnsafePermissions | Get-Random
-        $RandomShare = Get-Item $RandomSharedFolder.FullName
-        $RandomFileACL = (Get-Item $RandomShare).GetAccessControl()
-        $RandomFileArgs = $RandomGroup, $RandomUnsafePermission, "Allow"
-        $RandomFileAccessRule = New-Object System.Security.AccessControl.FileSystemAccessRule $RandomFileArgs
-        $RandomFileACL.SetAccessRule($RandomFileAccessRule)
-        $RandomShare.SetAccessControl($RandomFileACL)
+    Write-Host "`n[i] Now we will randomly misconfigure the share permissions"
+    Write-Host "[i] If you continue, this script will modify the permissions on random shares" -ForegroundColor Yellow
+    Write-Host "[i] Do you want to continue [Y] Yes "  -ForegroundColor Yellow -NoNewline
+    Write-Host "[N] " -ForegroundColor Yellow -NoNewline
+    Write-Host "No: "  -ForegroundColor Yellow -NoNewline
+    $WarningError = ''
+    $WarningError = Read-Host
+    if ($WarningError -like 'y') {
+        Write-Host "`n[+] Modifying share permissions"
+        try {
+            1..10 | ForEach-Object {
+                $RandomSharedFolder = $ShareList | Get-Random 
+                $RandomGroup = $Groups | Get-Random
+                $RandomUnsafePermission = $UnsafePermissions | Get-Random
+                $RandomShare = Get-Item $RandomSharedFolder.FullName
+                $RandomFileACL = (Get-Item $RandomShare).GetAccessControl()
+                $RandomFileArgs = $RandomGroup, $RandomUnsafePermission, "Allow"
+                $RandomFileAccessRule = New-Object System.Security.AccessControl.FileSystemAccessRule $RandomFileArgs
+                $RandomFileACL.SetAccessRule($RandomFileAccessRule)
+                $RandomShare.SetAccessControl($RandomFileACL)
+            }  
+        } catch {
+            Write-Error "Could not create modify share permissions"
+        }
+    } else {
+        Write-Warning "You chose to NOT modify the share permissions.`nThe shares will not have misconfigured permissions."
+        break;
     }
 }
 
@@ -269,13 +309,36 @@ function Set-UnsecuredCredentials {
                    "passwords.xlsx","logins.doc","logins.docx","logins.xls","logins.xlsx",
                    "install.ps1","ProdBackup.psm1", "ProdBackup.psd1", "adminsetup.vbs", 
                    "admin.bat", "setup.cmd")
-    $UnsecredCredentials = @("Username: user123
-                              Password: SecretPass789",
-                             "Username: test_account
-                             Password: LetMeIn2024")
-    foreach ($Share in $ShareList.FullName) {
-        $RandomFileName = $FileNames | Get-Random
-        New-Item -Path $Share -Name $RandomFileName -Value $($UnsecredCredentials | Get-Random)
+    $UnsecredCredentials = @("Username: johndoe|Password: Password123","Username: alice_smith|Password: qwerty456",
+                             "Username: admin_user|Password: P@ssw0rd!","Username: user123|Password: SecretPass789",
+                             "Username: test_account|Password: LetMeIn2024","Username: jane_doe|Password: Welcome123",
+                             "Username: developer_user|Password: DevPass@2024","Username: support_user|Password: SupportPass#2024",
+                             "Username: marketing_user|Password: Market123!","Username: operations_user|Password: OpsPass567"
+                             "P@ssw0rd123!", "SecurePass456$", "RandomPass789*", "Str0ngPassword!", "Pa$$w0rd!123", "Secur3P@ss", 
+                             "P@ssw0rd2024", "StrongP@ssword!", "Pa$$w0rd!456", "RandomP@ss789","password", "123456", "qwerty", 
+                             "abc123", "letmein", "password1", "12345678", "welcome", "admin", "iloveyou", "1234567", "football", 
+                             "123123", "monkey", "1234567890", "1234", "123456789", "dragon", "baseball", "sunshine")
+    
+    Write-Host "`n[i] Now we will create random files with unsecured credentials"
+    Write-Host "[i] If you continue, this will create random files that contain plaintext passwords" -ForegroundColor Yellow
+    Write-Host "[i] Do you want to continue [Y] Yes "  -ForegroundColor Yellow -NoNewline
+    Write-Host "[N] " -ForegroundColor Yellow -NoNewline
+    Write-Host "No: "  -ForegroundColor Yellow -NoNewline
+    $WarningError = ''
+    $WarningError = Read-Host
+    if ($WarningError -like 'y') {
+        Write-Host "`n[+] Creating unsecured credential files"
+        try {
+            foreach ($Share in $ShareList.FullName) {
+                $RandomFileName = $FileNames | Get-Random
+                New-Item -Path $Share -Name $RandomFileName -Value $($UnsecredCredentials | Get-Random)
+            }   
+        } catch {
+            Write-Error "Could not create unsecured credential files"
+        }
+    } else {
+        Write-Warning "You chose to NOT create unsecured credential files.`nThe shares will not have files with passwords in them."
+        break;
     }
 }
 
@@ -354,7 +417,7 @@ function Get-Art {
     Write-Host "`n By: Spencer Alessi                          v0.1 "
 }
     Get-Art
-    Write-Host "`nWelcome to BadShares`n" -BackgroundColor White -ForegroundColor Red
+    Write-Host "`nWelcome to BadShares!"
     Write-Host "BadShares creates file shares with random names and randomly misconfigured permissions."
     Write-Host "It also creates unsecured credential files and scatters them randomly throughout the shares.`n"
     Write-Warning "DO NOT RUN IN PRODUCTION!"
@@ -362,6 +425,8 @@ function Get-Art {
     Write-Host "Clear-BadShares" -ForegroundColor Cyan -NoNewLine
     Write-Host " to remove all BadShares.`n"
 
+    Write-Host "[i] Clearing any existing BadShares so we can start fresh..."
+    try { Clear-BadShares -Root $Root$Name} catch {}
 
     # create a BadShare folders, where all our bad shares will live
     $BadShareRoot = New-BadSharesRootDirectory
@@ -383,6 +448,8 @@ function Get-Art {
     # scripts: .ps1, .psm1, .psd1, .vbs, .bat, .cmd
     $RandomBadShares = $BadShares | Get-Random -Count 10
     $UnsecuredCredentials = Set-UnsecuredCredentials -ShareList $RandomBadShares
+
+    Write-Host "`n[+] BadShares has finished! Displaying results..." -ForegroundColor Cyan
 
     Find-BadShares -ShareList $BadShares.FullName | ft -AutoSize
     Find-UnsecuredCredentials -ShareList $BadShares.FullName | Sort-Object -Unique -Property SharePath
