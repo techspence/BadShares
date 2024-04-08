@@ -35,12 +35,10 @@ function New-BadSharesRootDirectory {
             Write-Warning -Message "You need to confirm the action to use BadShares."
             break
         }
-
         if (Test-Path -Path $BadSharesPath) {
             Write-Warning "The directory '$BadSharesPath' already exists!"
             Write-Host "[i] If you continue, this script will overwrite: " -ForegroundColor Yellow -NoNewline
             Write-Host "$BadSharesPath" -ForegroundColor Cyan
-
             Write-Host "[i] Do you want to continue [Y] Yes "  -ForegroundColor Yellow -NoNewline
             Write-Host "[N] " -ForegroundColor Yellow -NoNewline
             Write-Host "No: "  -ForegroundColor Yellow -NoNewline
