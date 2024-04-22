@@ -23,9 +23,12 @@ cd BadShares
 . .\Invoke-BadShares
 ```
 
-2. Download `Invoke-BadShares.ps1` manually. Open PowerShell and navigate to where you saved the script, then run
+2. Open PowerShell and download `Invoke-BadShares.ps1` manually
 
 ```PowerShell 
+# You may need to explicitly set the TLS version on older Windows like Server 2016
+# [Net.ServicePointManager]::SecurityProtocol = [Net.SecurityProtocolType]::Tls12
+Invoke-WebRequest https://raw.githubusercontent.com/techspence/BadShares/main/Invoke-BadShares.ps1 -OutFile Invoke-BadShares.ps1
 . .\Invoke-BadShares
 ```
 
