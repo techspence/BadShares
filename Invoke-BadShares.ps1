@@ -1,32 +1,39 @@
-﻿function New-BadSharesRootDirectory {
-    [CmdletBinding()]
+function New-BadSharesRootDirectory {
+    [CmdletBinding(
+        SupportsShouldProcess = $true,
+        ConfirmImpact = 'High'
+    )]
     param (
         [ValidateNotNullOrEmpty()]
         [string]$Root = "C:\",
 
         [ValidateNotNullOrEmpty()]
-        [string]$Name = "BadShares"
+        [string]$Name = "BadShares",
+
+        [Parameter(Mandatory = $false)]
+        [System.Management.Automation.SwitchParameter]$Force
     )
 
     begin {
         $BadSharesRoot = $Root
         $BadSharesSharesDirectoryName = "BadShares"
         $BadSharesPath = "$BadSharesRoot$BadSharesSharesDirectoryName"
+
+        # Detecting if Confirm switch is used to bypass the confirmation prompts
+        if ($Force -and -Not $Confirm) {
+            $ConfirmPreference = 'None'
+        }
     }
 
     process {
-        Write-Host "If you continue, this script create several new folders and files." -ForegroundColor Yellow 
-        Write-Host "Do you want to continue [Y] Yes "  -ForegroundColor Yellow -NoNewline
-        Write-Host "[N] " -ForegroundColor Yellow -NoNewline
-        Write-Host "No: "  -ForegroundColor Yellow -NoNewline
-        $WarningError = ''
-        $WarningError = Read-Host
-        if ($WarningError -like 'y') {
-            Write-Host "`n[i] Beginning the BadShares setup process..."
-           
-        } else {
-            Write-Warning "You need to select y to use BadShares."
-            break;
+        # Prompt for confirmation before proceeding
+        if ($PSCmdlet.ShouldProcess('Your computer', 'Creating several new folders and files')) { 
+
+            Write-Host -Object "`n[i] Beginning the BadShares setup process..."
+        }
+        else {
+            Write-Warning -Message "You need to confirm the action to use BadShares."
+            break
         }
         if (Test-Path -Path $BadSharesPath) {
             Write-Warning "The directory '$BadSharesPath' already exists!"
