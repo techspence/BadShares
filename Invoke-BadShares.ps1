@@ -394,7 +394,14 @@ function Invoke-BadShares {
         "Customer Service","Research and Development","Operations","Legal","Administration","Public Relations",
         "Quality Assurance","Supply Chain Management","Product Management","Training and Development","Accounting",
         "Business Development","Engineering","Design","Logistics","Purchasing","Risk Management","Compliance",
-        "Facilities Management","Health and Safety","Internal Audit","Corporate Communications")
+        "Facilities Management","Health and Safety","Internal Audit","Corporate Communications"),
+
+        [ValidateNotNullOrEmpty()]
+        [boolean]$Log = $True,
+
+        [ValidateNotNullOrEmpty()]
+        [string]$LogFile = "$PSScriptRoot\BadSharesLog_$(Get-Date -Format "MMddyyyy-HHmm").log"
+
     )
 
     if (Test-IsElevated) {
@@ -416,6 +423,10 @@ function Get-Art {
 
     Write-Host "`n By: Spencer Alessi                          v0.1 "
 }
+    if ($Log) {
+        Start-Transcript -Path $LogFile
+    }
+
     Get-Art
     Write-Host "`nWelcome to BadShares!"
     Write-Host "BadShares creates file shares with random names and randomly misconfigured permissions."
@@ -426,6 +437,7 @@ function Get-Art {
     Write-Host " to remove all BadShares.`n"
 
     Write-Host "[i] Clearing any existing BadShares so we can start fresh..."
+    
     try { Clear-BadShares -Root $Root$Name} catch {}
 
     # create a BadShare folders, where all our bad shares will live
@@ -453,4 +465,9 @@ function Get-Art {
 
     Find-BadShares -ShareList $BadShares.FullName | ft -AutoSize
     Find-UnsecuredCredentials -ShareList $BadShares.FullName | Sort-Object -Unique -Property SharePath
+
+    if ($Log) {
+        ""
+        Stop-Transcript
+    }
 }
